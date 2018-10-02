@@ -21,14 +21,35 @@ class Datareader(object):
         rows = self.train_df['playlist_id'].values
         cols = self.train_df['track_id'].values
 
-        urm = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(len(self.playlists), len(self.tracks)),
+        urm = sp.csr_matrix((np.ones(len(rows)), (rows, cols)),
+                            shape=(len(self.playlists), len(self.tracks)),
                             dtype=np.int32)
 
         return urm
 
-    def get_icm(self):
-        1
+    def get_icm(self, alid=True, arid=True):
+        assert alid or arid
 
-dr = Datareader()
-print(dr.get_urm())
+        # Gather into lists
+        rows = self.tracks_df['track_id'].values
+        cols_alid = self.tracks_df['album_id'].values
+        cols_arid = self.tracks_df['artist_id'].values
+
+        # Album
+        icm_alid = sp.csr_matrix((np.ones(len(rows)), (rows, cols_alid)),
+                            shape=(len(self.tracks), len(cols_alid)),
+                            dtype=np.int32)
+
+        # Artist
+        icm_arid = sp.csr_matrix((np.ones(len(rows)), (rows, cols_arid)),
+                                 shape=(len(self.tracks), len(cols_arid)),
+                                 dtype=np.int32)
+
+        if alid and arid is False:
+            return icm_alid
+        elif arid and alid is False:
+            return icm_arid
+        else:
+            icm = sp.hstack([icm_arid, icm_alid])
+            return icm
 
