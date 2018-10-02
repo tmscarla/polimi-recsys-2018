@@ -15,8 +15,8 @@ class RandomRecommender(object):
         return "RandomRec"
 
     def fit(self):
-        self.random_tracks = list(np.random.choice(20634, 50))
-        self.random_tracks_str = ' '.join([str(i) for i in self.random_tracks])
+        self.random_tracks = np.random.choice(20634, 50)
+        self.random_tracks_str = ' '.join([str(i) for i in self.random_tracks[0:10]])
         self.prediction = []
 
     def recommend(self, remove_seed=True):
@@ -36,7 +36,8 @@ class RandomRecommender(object):
                 hold_ix = ~np.in1d(self.random_tracks, urm.indices[urm.indptr[t]:urm.indptr[t+1]])
                 recommended_tracks = self.random_tracks[hold_ix]
                 recommended_tracks = recommended_tracks[0:10]
-                self.prediction.append([t, recommended_tracks])
+                recommended_tracks_str = ' '.join([str(i) for i in recommended_tracks])
+                self.prediction.append([t, recommended_tracks_str])
 
             else:
                 self.prediction.append([t, self.random_tracks_str])
@@ -46,10 +47,10 @@ class RandomRecommender(object):
         df.to_csv(str(self) + '.csv', sep=',', index=False)
 
 
-from datareader import Datareader
+if __name__ == '__main__':
+    from datareader import Datareader
+    dr = Datareader()
 
-dr = Datareader()
-
-rec = RandomRecommender(dr)
-rec.fit()
-rec.recommend()
+    rec = RandomRecommender(dr)
+    rec.fit()
+    rec.recommend()
