@@ -30,7 +30,6 @@ class Evaluator(object):
         test = pd.read_csv("data/solution.csv")
 
         self.dict_soluzione = self.csv_to_dict(test)
-        print(self.dict_soluzione)
 
     def extract_songs(self, string_songs):
         if isinstance(string_songs, str):
