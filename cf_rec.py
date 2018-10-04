@@ -6,7 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 
 
-class CBFRecommender(object):
+class CFRecommender(object):
     """
     A random recommender. It recommends 10 random tracks for each playlist.
     """
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     from datareader import Datareader
     dr = Datareader()
 
-    rec = CBFRecommender(dr)
+    rec = CFRecommender(dr)
     rec.fit()
     rec.recommend()
 
