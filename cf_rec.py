@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     rec = CFRecommender(dr)
     rec.fit()
-    rec.recommend()
+    rec.recommend(remove_seed=False)
 
 
 
