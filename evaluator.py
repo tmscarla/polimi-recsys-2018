@@ -50,6 +50,7 @@ class Evaluator(object):
         track_ids = [self.extract_songs(x) for x in df['track_ids'].values]
         return dict(zip(pl_ids,track_ids))
 
+
     def apk(self, actual, predicted, k=10):
         if len(predicted) > k:
             predicted = predicted[:k]
@@ -90,6 +91,28 @@ class Evaluator(object):
             print("your solution dict hasn't got the right solution keys")
             exit()
 
+    def csv(self):
+        df = pd.DataFrame(self.prediction, columns=['playlist_id', 'track_ids'])
+        df.to_csv(str(self) + '.csv', sep=',', index=False)
+    def evaluation(self, eurm, urm, dr, save=False, name="no_name"):
+        # Seed removing
+        eurm = eurm - urm
+        # Taking top 10
+        prediction = []
+
+        for row in dr.target_playlists:
+            val = eurm.data[eurm.indptr[row]:eurm.indptr[row + 1]]
+            ind = val.argsort()[-10:][::-1]
+            ind = list(eurm[row].indices[ind])
+
+            recommended_tracks_str = ' '.join([str(i) for i in ind])
+            prediction.append([row, recommended_tracks_str])
+
+        rec_df = pd.DataFrame(prediction, columns=['playlist_id', 'track_ids'])
+        dict_tua_sol = self.csv_to_dict(rec_df)
+        if save:
+            rec_df.to_csv(str(self) + '.csv', sep=',', index=False)
+        return self.evaluate_dict(dict_tua_sol)
 
 if __name__ == '__main__':
 
