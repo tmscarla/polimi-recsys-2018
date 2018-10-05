@@ -94,16 +94,19 @@ class Evaluator(object):
     def csv(self):
         df = pd.DataFrame(self.prediction, columns=['playlist_id', 'track_ids'])
         df.to_csv(str(self) + '.csv', sep=',', index=False)
+
     def evaluation(self, eurm, urm, dr, save=False, name="no_name"):
         # Seed removing
-        eurm = eurm - urm
+        urm2 = urm.copy()
+        urm2.data = np.ones(len(urm.data))*eurm.max()
+        eurm2 = eurm - urm2
         # Taking top 10
         prediction = []
 
         for row in dr.target_playlists:
-            val = eurm.data[eurm.indptr[row]:eurm.indptr[row + 1]]
+            val = eurm2.data[eurm2.indptr[row]:eurm2.indptr[row + 1]]
             ind = val.argsort()[-10:][::-1]
-            ind = list(eurm[row].indices[ind])
+            ind = list(eurm2[row].indices[ind])
 
             recommended_tracks_str = ' '.join([str(i) for i in ind])
             prediction.append([row, recommended_tracks_str])
