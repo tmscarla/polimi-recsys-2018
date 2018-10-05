@@ -22,7 +22,11 @@ class CBFRecommender(object):
         self.urm = self.datareader.get_urm()
 
 
-        self.icm = self.datareader.get_icm(alid=al_id, arid=ar_id)
+        # self.icm = self.datareader.get_icm(alid=al_id, arid=ar_id)
+
+
+        self.icm = self.datareader.get_icm(alid=True, arid=False)
+        self.icm -= 0.45*self.datareader.get_icm(alid=False, arid=True)
 
         # Train the model
         print("["+mode+"]")
@@ -49,7 +53,6 @@ class CBFRecommender(object):
         """
         Compute a single recommendation for a target playlist.
         :param remove_seed: removed seed tracks
-        :param mode: #TODO
         :return: recommended_tracks or recommended_tracks_uri
         """
 

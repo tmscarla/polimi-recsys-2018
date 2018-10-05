@@ -114,7 +114,7 @@ class Evaluator(object):
         rec_df = pd.DataFrame(prediction, columns=['playlist_id', 'track_ids'])
         dict_tua_sol = self.csv_to_dict(rec_df)
         if save:
-            rec_df.to_csv(str(self) + '.csv', sep=',', index=False)
+            rec_df.to_csv(name + '.csv', sep=',', index=False)
         return self.evaluate_dict(dict_tua_sol)
 
 if __name__ == '__main__':
