@@ -36,7 +36,10 @@ class Evaluator(object):
             tmp = re.sub(' +', ' ', string_songs.rstrip())
             ids = tmp.split(' ')
             for i, el in enumerate(ids):
-                ids[i] = int(el)
+                try:
+                    ids[i] = int(el)
+                except:
+                    print('exception extract song, --> ids = %s <-- what is this? *by Simo'% ids)
             return ids
 
         elif isinstance(string_songs, type(np.nan)):
