@@ -37,13 +37,13 @@ class Datareader(object):
 
         # Album
         icm_alid = sp.csr_matrix((np.ones(len(rows)), (rows, cols_alid)),
-                            shape=(len(self.tracks), len(cols_alid)),
-                            dtype=np.int32)
+                            	shape=(len(self.tracks), len(np.unique(cols_alid))),
+                            	dtype=np.int32)
 
         # Artist
         icm_arid = sp.csr_matrix((np.ones(len(rows)), (rows, cols_arid)),
-                                 shape=(len(self.tracks), len(cols_arid)),
-                                 dtype=np.int32)
+                                shape=(len(self.tracks), len(np.unique(cols_arid))),
+                                dtype=np.int32)
 
         if alid and arid is False:
             return icm_alid
