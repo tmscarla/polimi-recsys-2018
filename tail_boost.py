@@ -21,7 +21,6 @@ class TailBoost(object):
         """
         self.datareader = datareader
         self.urm = urm
-        self.urm = pre.norm_l2_row(urm)
         self.similarity = track_similarity
 
     def boost(self, target_playlists, last_tracks, k=5, gamma=0.1):
@@ -76,8 +75,10 @@ class TailBoost(object):
 
         urm_boosted = sp.csr_matrix((data, (rows, cols)), shape=self.urm.shape)
 
-        return self.urm + urm_boosted
+        self.urm = pre.norm_l1_row(urm)
+        urm_boosted = pre.norm_l1_row(urm_boosted)
 
+        return self.urm + urm_boosted
 
 
 if __name__ == '__main__':
@@ -85,7 +86,7 @@ if __name__ == '__main__':
     ev = Evaluator()
     urm = dr.get_urm()
     t_ids = dr.target_playlists
-    verbose = True
+    verbose = False
 
     s = sim.tversky(pre.bm25_row(urm.T), pre.bm25_col(urm), k=5000, alpha=0.30, beta=0.50, verbose=verbose,
                     format_output='csr')
@@ -95,9 +96,9 @@ if __name__ == '__main__':
     score = ev.evaluation(r_cfib, urm, dr, save=False, name='best_cf_ib')
     print('%.5f' % (score))
 
-    for a in [0.1, 0.001, 0.2, 0.5]:
-        for b in [1,2,3,4,5]:
+    for a in [0.001]:
+        for b in [1, 2, 3]:
             tb = TailBoost(dr, r_cfib, s)
-            boosted = tb.boost(dr.target_playlists, last_tracks=b, gamma=a, k=3)
+            boosted = tb.boost(dr.target_playlists, last_tracks=b, gamma=a, k=1)
             score = ev.evaluation(boosted, urm, dr, save=False, name='best_cf_ib')
             print('%.5f' % (score))
