@@ -11,8 +11,6 @@ from evaluator import Evaluator
 from utils import pre_processing as pre
 
 
-
-
 class AlbumBoost(object):
 
     def __init__(self, datareader, eurm, urm):

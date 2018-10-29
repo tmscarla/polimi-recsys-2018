@@ -25,7 +25,7 @@ class TailBoost(object):
 
     def boost(self, target_playlists, last_tracks, k=5, gamma=0.1):
         """
-        Boost the eurm for the playlists in specified categories.
+        Boost the eurm for the playlists in specified categories..
         :param target_playlists: set of target playlists
         :param last_tracks: list of last tracks that will be boosted in each category
         :param: k: the first k simile tracks will be considered for boosting

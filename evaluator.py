@@ -23,6 +23,7 @@ import scipy.sparse as sps
 import pandas as pd
 import re
 
+from collections import Counter
 
 class Evaluator(object):
 
