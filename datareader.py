@@ -53,3 +53,41 @@ class Datareader(object):
             icm = sp.hstack([icm_arid, icm_alid])
             return icm
 
+    def get_track_to_album_dict(self):
+        """
+        :return: dictionary: {track: album}
+        """
+        tracks_df = self.tracks_df
+
+        keys = list(tracks_df['track_id'].values)
+        values = list(tracks_df['album_id'].values)
+        dictionary = dict(zip(keys, values))
+        del tracks_df
+
+        return dictionary
+
+    def get_track_to_artist_dict(self):
+        """
+        :return: dictionary: {track: artist}
+        """
+        tracks_df = self.tracks_df
+
+        keys = list(tracks_df['track_id'].values)
+        values = list(tracks_df['artist_id'].values)
+        dictionary = dict(zip(keys, values))
+        del tracks_df
+
+        return dictionary
+
+    def get_track_to_duration(self):
+        """
+        :return: dictionary: {track: duration}
+        """
+        tracks_df = self.tracks_df
+
+        keys = list(tracks_df['track_id'].values)
+        values = list(tracks_df['duration_sec'].values)
+        dictionary = dict(zip(keys, values))
+        del tracks_df
+
+        return dictionary
