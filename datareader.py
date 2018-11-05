@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import scipy.sparse as sp
 from definitions import ROOT_DIR
+from utils import pre_processing as pre
+import similaripy as sim
 
 
 class Datareader(object):
@@ -14,6 +16,7 @@ class Datareader(object):
         self.tracks = self.tracks_df['track_id'].values
 
         self.train_df = pd.read_csv(ROOT_DIR + '/data/train.csv', sep=',')
+        self.test_df = pd.read_csv(ROOT_DIR + '/data/local_test.csv', sep=',')
 
         self.target_playlists = pd.read_csv(ROOT_DIR + '/data/target_playlists.csv', sep=',')['playlist_id'].values
 
@@ -26,6 +29,17 @@ class Datareader(object):
                             dtype=np.int32)
 
         return urm
+
+    def get_urm_test(self):
+        rows = self.test_df['playlist_id'].values
+        cols = self.test_df['track_id'].values
+
+        urm_test = sp.csr_matrix((np.ones(len(rows)), (rows, cols)),
+                            shape=(len(self.playlists), len(self.tracks)),
+                            dtype=np.int32)
+
+        return urm_test
+
 
     def get_icm(self, alid=True, arid=True):
         assert alid or arid
@@ -52,6 +66,40 @@ class Datareader(object):
         else:
             icm = sp.hstack([icm_arid, icm_alid])
             return icm
+
+    def get_eurm_copenaghen(self, verbose=False):
+        urm = self.get_urm()
+        t_ids = self.target_playlists
+
+        # CF IB
+        s = sim.tversky(pre.bm25_row(urm.T), pre.bm25_col(urm), k=5000, alpha=0.30, beta=0.50, verbose=verbose,
+                        format_output='csr')
+        s.data = np.power(s.data, 0.75)
+        r_cfib = sim.dot_product(urm, s.T, target_rows=t_ids, k=500, verbose=verbose)
+
+        # CF UB
+        s = sim.tversky(pre.bm25_row(urm), pre.bm25_col(urm.T), alpha=1, beta=1, k=70, shrink=0, target_rows=t_ids,
+                        verbose=verbose)
+        s.data = np.power(s.data, 2.1)
+        r_cfub = sim.dot_product(s, urm, k=500, verbose=verbose)
+
+        # CF IB + UB
+        r_cf = r_cfib + 3.15 * r_cfub
+
+        # CB AL-AR
+        icm_al = self.get_icm(alid=True, arid=False)
+        icm_ar = self.get_icm(alid=False, arid=True)
+        icm = sp.hstack([icm_al * 1, icm_ar * 0.4])
+        s = sim.dot_product(pre.bm25_col(icm), pre.bm25_col(icm.T), k=31, verbose=verbose, format_output='csr')
+        s.data = np.power(s.data, 0.8)
+        r_cb = sim.dot_product(urm, s.T, target_rows=t_ids, k=500, verbose=verbose)
+
+        # ENSEMBLE
+        r1 = pre.norm_l1_row(r_cf.tocsr())
+        r2 = pre.norm_l1_row(r_cb.tocsr())
+        r_tot = r1 + 0.04127 * r2
+
+        return pre.norm_l1_row(r_tot)
 
     def get_track_to_album_dict(self):
         """
