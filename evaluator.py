@@ -77,6 +77,7 @@ class Evaluator(object):
         return np.mean([self.apk(a, p, k) for a, p in zip(actual, predicted)])
 
 
+
     def evaluate_dict(self, dict_to_evaluate):
 
         if set(self.dict_soluzione.keys()) == set(dict_to_evaluate.keys()):
@@ -95,11 +96,42 @@ class Evaluator(object):
             print("your solution dict hasn't got the right solution keys")
             exit()
 
+    def evaluate_halfs_dict(self, dict_to_evaluate, dr):
+        if set(self.dict_soluzione.keys()) == set(dict_to_evaluate.keys()):
+
+            set_first = set(dr.target_playlists[:5000])
+            set_second = set(dr.target_playlists[5000:])
+
+            predicted_first = list()
+            actual_first = list()
+
+            predicted_second = list()
+            actual_second = list()
+
+            for key, value in self.dict_soluzione.items():
+                if key in set_first:
+                    actual_first.append(value)
+                    predicted_first.append(dict_to_evaluate[key])
+                elif key in set_second:
+                    actual_second.append(value)
+                    predicted_second.append(dict_to_evaluate[key])
+
+            res_first = self.mapk(actual_first, predicted_first)
+            res_second = self.mapk(actual_second, predicted_second)
+
+            return res_first,res_second
+
+        else:
+            print("your solution dict hasn't got the right solution keys")
+            exit()
+
+
+
     def csv(self):
         df = pd.DataFrame(self.prediction, columns=['playlist_id', 'track_ids'])
         df.to_csv(str(self) + '.csv', sep=',', index=False)
 
-    def evaluation(self, eurm, urm, dr, save=False, name="no_name"):
+    def evaluation(self, eurm, urm, dr, save=False, name="no_name", separate_halfs=False):
         # Seed removing
         urm2 = urm.copy()
         urm2.data = np.ones(len(urm.data))*eurm.max()
@@ -117,16 +149,24 @@ class Evaluator(object):
 
         rec_df = pd.DataFrame(prediction, columns=['playlist_id', 'track_ids'])
         dict_tua_sol = self.csv_to_dict(rec_df)
+
         if save:
             rec_df.to_csv(name + '.csv', sep=',', index=False)
+
+        if separate_halfs:
+            return self.evaluate_halfs_dict(dict_to_evaluate=dict_tua_sol, dr=dr)
+
         return self.evaluate_dict(dict_tua_sol)
+
+
+
 
 if __name__ == '__main__':
 
-    prova_da_valutare = pd.read_csv("CFRec.csv")
+    prova_da_valutare = pd.read_csv("TopPop.csv")
 
     ev = Evaluator()
 
     dict_prova = ev.csv_to_dict(prova_da_valutare)
 
-    print(ev.evaluate_dict(dict_prova) )
+    print(ev.evaluate_dict(dict_prova))
