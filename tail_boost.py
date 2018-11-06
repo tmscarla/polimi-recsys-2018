@@ -13,14 +13,14 @@ from utils import pre_processing as pre
 
 class TailBoost(object):
 
-    def __init__(self, datareader, urm, track_similarity):
+    def __init__(self, datareader, eurm, track_similarity):
         """
         Initialize the booster.
         :param datareader: a Datareader object
         :param track_similarity: a track-track similarity matrix in CSR format
         """
         self.datareader = datareader
-        self.urm = urm
+        self.eurm = eurm
         self.similarity = track_similarity
 
     def boost(self, target_playlists, last_tracks, k=5, gamma=0.1):
@@ -66,39 +66,41 @@ class TailBoost(object):
 
                     weighted_boost_value = boost_values[i] * log(pos + 1)
 
-                    data.append(weighted_boost_value * gamma)
+                    data.append(weighted_boost_value)
                     rows.append(p)
                     cols.append(index)
 
                 # Increase position at each iteration
                 pos += 1
 
-        urm_boosted = sp.csr_matrix((data, (rows, cols)), shape=self.urm.shape)
+        urm_boosted = sp.csr_matrix((data, (rows, cols)), shape=self.eurm.shape)
 
-        self.urm = pre.norm_l1_row(urm)
+        self.eurm = pre.norm_l1_row(self.eurm)
         urm_boosted = pre.norm_l1_row(urm_boosted)
 
-        return self.urm + urm_boosted
+        return self.eurm + (urm_boosted * gamma)
 
 
 if __name__ == '__main__':
-    dr = Datareader()
+    dr = Datareader(train_new=2)
     ev = Evaluator()
     urm = dr.get_urm()
-    t_ids = dr.target_playlists
-    verbose = False
+    eurm_ens = dr.get_eurm_copenaghen()
 
-    s = sim.tversky(pre.bm25_row(urm.T), pre.bm25_col(urm), k=5000, alpha=0.30, beta=0.50, verbose=verbose,
-                    format_output='csr')
+    t_sim = sim.tversky(pre.bm25_row(urm.T), pre.bm25_col(urm), k=5000, alpha=0.30,
+                             beta=0.50, verbose=False, format_output='csr')
+    t_sim.data = np.power(t_sim.data, 0.75)
 
-    s.data = np.power(s.data, 0.75)
-    r_cfib = sim.dot_product(urm, s.T, target_rows=t_ids, k=500, verbose=verbose)
-    score = ev.evaluation(r_cfib, urm, dr, save=False, name='best_cf_ib')
-    print('%.5f' % (score))
+    for lt in [2, 4, 5, 6, 7, 8, 9]:
+        for k in [2, 3, 5, 6, 7, 9]:
+            for g in [0.0001, 0.0005, 0.001, 0.005, 0.01]:
 
-    for a in [0.001]:
-        for b in [1, 2, 3]:
-            tb = TailBoost(dr, r_cfib, s)
-            boosted = tb.boost(dr.target_playlists, last_tracks=b, gamma=a, k=1)
-            score = ev.evaluation(boosted, urm, dr, save=False, name='best_cf_ib')
-            print('%.5f' % (score))
+                tb = TailBoost(dr, eurm_ens, t_sim)
+                boosted = tb.boost(dr.target_playlists, last_tracks=lt, gamma=g, k=k)
+                score = ev.evaluation(boosted, urm, dr, save=False, name='tb')
+
+                print('gamma = ' + str(g))
+                print('last = ' + str(lt))
+                print('k = ' + str(k))
+                print('%.5f' % score)
+                print('-----------------------')

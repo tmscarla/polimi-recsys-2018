@@ -15,18 +15,80 @@ from evaluator import Evaluator
 from utils import pre_processing as pre
 from album_boost import AlbumBoost
 from collections import Counter
-from multiprocessing import Pool, Process
-from threading import Thread
 import xgboost as xgb
 
 
 class XGBModel(object):
 
     def __init__(self, datareader):
-        pass
+        self.datareader = datareader
 
-    def fit(self):
-        pass
+    def fit(self, X_train, y_train, dump=True, verbose=False):
+        if verbose:
+            print('Start training xgb:')
+
+        # Create a list of length of each group
+        pids = list(dict.fromkeys(X_train['PID'].values))
+        count = Counter(X_train['PID'].values)
+        group = []
+
+        print(pids)
+
+        for p in pids:
+            group.append(count[p])
+
+        print(group)
+
+        # Remove TID and PID as features
+        X_train = X_train.iloc[:, :-3]
+
+        # Set group
+        dtrain = xgb.DMatrix(X_train, label=y_train)
+        dtrain.set_group(group)
+
+        # Params and number of different trees to be built
+        param = {
+            'max_depth': 10,  # the maximum depth of each tree
+            'eta': 0.3,  # the training step for each iteration
+            'silent': 1,  # logging mode - quiet
+            'objective': 'rank:map'}  # the number of classes that exist in this datset
+        num_round = 100  # the number of training iterations
+
+        # Train model
+        self.bst = xgb.train(param, dtrain, num_round, verbose_eval=True)
+
+        if dump:
+            self.bst.dump_model('dump.raw.txt')
+
+    def predict(self, X_test):
+        self.X_test = X_test.copy()
+
+        pids = list(dict.fromkeys(X_test['PID'].values))
+        count = Counter(X_test['PID'].values)
+        group = []
+
+        for p in pids:
+            group.append(count[p])
+
+        X_test.drop(['PID', 'TID'], axis=1, inplace=True)
+
+        dtest = xgb.DMatrix(X_test)
+        dtest.set_group(group)
+
+        preds = self.bst.predict(dtest)
+
+        return preds
+
+    def preds_to_eurm(self, preds):
+        rows = self.X_test['PID'].values
+        cols = self.X_test['TID'].values
+
+        data = preds[:, 1]
+
+        eurm = sp.csr_matrix((data, (rows, cols)),
+                             shape=(len(self.datareader.playlists), len(self.datareader.tracks)))
+
+        return eurm
 
 
 class XGBFeatureExtractor(object):
@@ -53,8 +115,8 @@ class XGBFeatureExtractor(object):
         self.t_sim_cb.data = np.power(self.t_sim_cb.data, 0.8)
 
         # Dataframes of samples
-        self.cols = ['CFU', 'CFI', 'CB', 'ALS', 'P_LEN','P_DUR', 'ARH', 'ALH', 'P_POP',
-                'ARID', 'ALID', 'T_DUR', 'T_POP', 'T_TO_TP', 'P_TO_PT', 'ALO', 'ARO', 'TARGET']
+        self.cols = ['CFU', 'CFI', 'CB', 'ALS', 'P_LEN','P_DUR', 'ARH', 'ALH', 'P_POP', 'ARID',
+                     'ALID', 'T_DUR', 'T_POP', 'T_TO_TP', 'P_TO_PT', 'ALO', 'ARO', 'PID', 'TID', 'TARGET']
 
         # Build singular features
         self.build_tracks_features()
@@ -131,7 +193,6 @@ class XGBFeatureExtractor(object):
                                                     k=500, verbose=verbose))
 
         # ALS
-        # f = 450
         model = implicit.als.AlternatingLeastSquares(factors=450, iterations=3, regularization=0.01)
         model.fit(self.urm_T)
         col, row, value = [], [], []
@@ -184,38 +245,12 @@ class XGBFeatureExtractor(object):
 
         return p_aro, p_alo, sim_t_seeds, sim_p_ps
 
-    def prova(self, p):
-        p_tracks = self.urm.indices[self.urm.indptr[p]:self.urm.indptr[p + 1]]
-
-        n_positive = 5
-        if n_positive is None or n_positive > len(p_tracks):
-            n_positive = len(p_tracks)
-
-        # Extract seed tracks and an equal number of non-seed tracks randomly
-        positives = list(np.random.choice(p_tracks, n_positive))
-        negatives = []
-        while len(negatives) < n_positive:
-            neg = np.random.choice(self.urm.shape[1])
-            if neg not in p_tracks:
-                negatives.append(neg)
-
-        pos_and_neg = positives + negatives
-
-        lista = []
-
-        # Generate samples
-        for i in range(len(pos_and_neg)):
-            t = pos_and_neg[i]
-
-            p_aro, p_alo, sim_t_seeds, sim_p_ps = self.build_pairwise_feature(p, t)
-            lista.append([p_aro, p_alo, sim_t_seeds, sim_p_ps])
-
-        return lista
-
     def generate_training_samples(self, n_positive=None):
         df_list = []
+        n_p = n_positive
 
         for p in tqdm(range(self.urm.shape[0]), desc='Generate training samples'):
+            n_positive = n_p
             p_tracks = self.urm.indices[self.urm.indptr[p]:self.urm.indptr[p+1]]
 
             if n_positive is None or n_positive > len(p_tracks):
@@ -262,13 +297,15 @@ class XGBFeatureExtractor(object):
                                 'P_TO_PT': sim_p_ps,
                                 'ALO': p_alo,
                                 'ARO': p_aro,
+                                'PID': p,
+                                'TID': t,
                                 'TARGET': target})
 
         self.df_train = pd.DataFrame(df_list)
         self.df_train = self.df_train[self.cols]
         self.df_train.to_csv('df_train.csv', index=False)
 
-    def generate_test_samples(self):
+    def generate_test_samples(self, negative=False):
         df_list = []
 
         for p in tqdm(self.datareader.target_playlists, desc='Generate test samples'):
@@ -282,7 +319,10 @@ class XGBFeatureExtractor(object):
                 if neg not in p_tracks:
                     n_tracks.append(neg)
 
-            tracks = p_tracks
+            if negative:
+                tracks = p_tracks + n_tracks
+            else:
+                tracks = p_tracks
 
             # Generate samples
             for i in range(len(tracks)):
@@ -315,11 +355,13 @@ class XGBFeatureExtractor(object):
                                 'P_TO_PT': sim_p_ps,
                                 'ALO': p_alo,
                                 'ARO': p_aro,
+                                'PID': p,
+                                'TID': t,
                                 'TARGET': target})
 
         self.df_test = pd.DataFrame(df_list)
         self.df_test = self.df_test[self.cols]
-        self.df_test.to_csv('df_test_ones.csv', index=False)
+        self.df_test.to_csv('df_test.csv', index=False)
 
     def generate_prediction_samples(self, eurm, k):
         df_list = []
@@ -331,6 +373,8 @@ class XGBFeatureExtractor(object):
             idx = np.argsort(eurm.data[r_start:r_end])[::-1][:k]
             p_tracks = eurm.indices[r_start:r_end][idx]
             p_tracks = list(p_tracks)
+            print(p)
+            print(p_tracks)
 
             # Generate samples
             for i in range(len(p_tracks)):
@@ -356,79 +400,95 @@ class XGBFeatureExtractor(object):
                                 'T_TO_TP': sim_t_seeds,
                                 'P_TO_PT': sim_p_ps,
                                 'ALO': p_alo,
-                                'ARO': p_aro})
+                                'ARO': p_aro,
+                                'PID': p,
+                                'TID': t})
 
         self.df_predict = pd.DataFrame(df_list)
-        self.df_predict = self.df_predict[self.cols]
-        self.df_predict = self.df_predict.iloc[:, -1]
-        self.df_test.to_csv('df_predict.csv', index=False)
+        cols = self.cols.copy()
+        cols.remove('TARGET')
+        self.df_predict = self.df_predict[cols]
+        self.df_predict.to_csv('pipp.csv', index=False)
 
 
 if __name__ == '__main__':
+    # dr = Datareader()
+    # ev = Evaluator()
+    # urm = dr.get_urm()
+    # #eurm = dr.get_eurm_copenaghen()
+    # #score = ev.evaluation(eurm, urm, dr, save=True, name='copen')
+    #
+    #
+    # pred_vector = pd.read_csv('preds_map_10.csv').values.flatten()
+    # print(len(pred_vector))
+    #
+    # X_test = pd.read_csv('df_predict_10.csv')
+    # tids = X_test['TID'].values
+    # pids = X_test['PID'].values
+    #
+    # r = []
+    # c = []
+    # d = []
+    #
+    # for i in range(0, len(pred_vector), 10):
+    #     p = pids[i]
+    #     top = np.argsort(pred_vector[i:i+10])[::-1]
+    #     tracks = tids[i:i+10][top]
+    #     print(p)
+    #     print(tracks)
+    #     print('--------')
+    #
+    #     for j in range(10):
+    #         r.append(p)
+    #         c.append(tracks[j])
+    #         d.append(10-j)
+    #
+    # eurm_prova = sp.csr_matrix((d, (r, c)), shape=urm.shape)
+    # score = ev.evaluation(eurm_prova, urm, dr, save=False, name='prova')
+    # print(score)
+    #
+    # exit()
+
     dr = Datareader()
     ev = Evaluator()
+    urm = dr.get_urm()
     eurm = dr.get_eurm_copenaghen()
+    score = ev.evaluation(eurm, urm, dr, save=True, name='cp')
+    idx = np.argsort(eurm.data[eurm.indptr[7]:eurm.indptr[8]])[-10:][::-1]
+    p_tracks = eurm.indices[eurm.indptr[7]:eurm.indptr[8]][idx]
+    print(p_tracks)
 
     xgb_fe = XGBFeatureExtractor(dr)
-    # xgb_fe.generate_training_samples(n_positive=15)
+    # xgb_fe.generate_training_samples()
     # xgb_fe.generate_test_samples()
-    xgb_fe.generate_prediction_samples(eurm, 30)
-    exit()
+    xgb_fe.generate_prediction_samples(eurm, 10)
 
     train = pd.read_csv('df_train.csv')
     X_train = train.iloc[:, :-1]
     y_train = train.iloc[:, -1]
 
-    test = pd.read_csv('df_test_ones.csv')
-    X_test = test.iloc[:, :-1]
-    y_test = test.iloc[:, -1]
+    X_test = pd.read_csv('df_predict_10.csv')
 
+    xgbmodel = XGBModel(dr)
+    xgbmodel.fit(X_train=train, y_train=y_train)
+    preds = xgbmodel.predict(X_test)
+    preds_df = pd.DataFrame(preds)
+    preds_df.to_csv('preds_map_10.csv', index=False)
 
-    dtrain = xgb.DMatrix(X_train, label=y_train)
-    dtest = xgb.DMatrix(X_test, label=y_test)
+    exit()
+    eurm_xgb = xgbmodel.preds_to_eurm(preds)
+    print(eurm.shape)
 
-    param = {
-        'max_depth': 10,  # the maximum depth of each tree
-        'eta': 0.3,  # the training step for each iteration
-        'silent': 1,  # logging mode - quiet
-        'objective': 'multi:softprob',  # error evaluation for multiclass training
-        'num_class': 2}  # the number of classes that exist in this datset
-    num_round = 20  # the number of training iterations
+    eurm_xgb = pre.norm_l1_row(eurm_xgb)
 
-    print('Start training')
-    bst = xgb.train(param, dtrain, num_round, verbose_eval=True)
-    bst.dump_model('dump.raw.txt')
+    for a in [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]:
+        eurm_ens = (eurm * a) + ((1-a) * eurm_xgb)
 
+        score = ev.evaluation(eurm_ens, urm, dr, save=True, name='xgb')
+        print(a)
+        print(score)
+    exit()
 
-
-    preds = bst.predict(dtest)
-    best_preds = np.asarray([np.argmax(line) for line in preds])
-
-    from sklearn.metrics import precision_score
-    print(precision_score(y_test, best_preds, average='macro'))
-
-
-
-
-    # urm = dr.get_urm()
-    # t_ids = dr.target_playlists
-    # verbose = False
-    #
-    # s = sim.tversky(pre.bm25_row(urm.T), pre.bm25_col(urm), k=5000, alpha=0.30, beta=0.50, verbose=verbose,
-    #                 format_output='csr')
-    #
-    # s.data = np.power(s.data, 0.75)
-    # r_cfib = sim.dot_product(urm, s.T, target_rows=t_ids, k=500, verbose=verbose)
-    # score = ev.evaluation(r_cfib, urm, dr, save=False, name='best_cf_ib')
-    # print('%.5f' % (score))
-    #
-    # ab = AlbumBoost(dr, eurm=r_cfib, urm=urm)
-    #
-    # for g in [1]:
-    #     for k in [10]:
-    #         boosted = ab.boost(target_playlists=dr.target_playlists, k=k, gamma=g)
-    #         score = ev.evaluation(boosted, urm, dr, save=True, name='copenhagen_boosted')
-    #         print(g, k, '%.5f' % (score))
 
 
 

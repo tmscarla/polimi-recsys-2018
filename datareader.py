@@ -8,14 +8,17 @@ import similaripy as sim
 
 class Datareader(object):
 
-    def __init__(self):
+    def __init__(self, train_new=None):
         self.playlists_df = pd.read_csv(ROOT_DIR + '/data/playlists.csv', sep=',')
         self.playlists = self.playlists_df['playlist_id'].values
 
         self.tracks_df = pd.read_csv(ROOT_DIR + '/data/tracks.csv', sep=',')
         self.tracks = self.tracks_df['track_id'].values
 
-        self.train_df = pd.read_csv(ROOT_DIR + '/data/train.csv', sep=',')
+        if train_new is None:
+            self.train_df = pd.read_csv(ROOT_DIR + '/data/train.csv', sep=',')
+        else:
+            self.train_df = pd.read_csv(ROOT_DIR + '/data/train_new_' + str(train_new) + '.csv', sep=',')
         self.test_df = pd.read_csv(ROOT_DIR + '/data/local_test.csv', sep=',')
 
         self.target_playlists = pd.read_csv(ROOT_DIR + '/data/target_playlists.csv', sep=',')['playlist_id'].values
@@ -139,3 +142,10 @@ class Datareader(object):
         del tracks_df
 
         return dictionary
+
+
+if __name__ == '__main__':
+    df = pd.read_csv(ROOT_DIR + '/data/train_new_0.csv', sep=',')
+    df = df.fillna(-1).astype(int)
+    df.rename(columns={'ricPID': 'playist_id'}, inplace = True)
+    df.to_csv(ROOT_DIR + '/data/train_new_0_.csv', index=False)
