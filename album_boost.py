@@ -20,8 +20,9 @@ class AlbumBoost(object):
         :param urm: the User Rating Matrix
         """
         self.datareader = datareader
+        self.urm = self.datareader.get_urm()
         self.eurm = pre.norm_l1_row(eurm)
-        self.popularity = urm.sum(axis=0)
+        self.popularity = self.urm.sum(axis=0)
         self.popularity = np.squeeze(np.asarray(self.popularity))
         self.track_to_album = self.get_track_to_album_dict()
         self.album_to_tracks = self.get_album_to_tracks_dict()
@@ -58,10 +59,11 @@ class AlbumBoost(object):
 
         return dictionary
 
-    def boost(self, target_playlists, k=5, gamma=0.1):
+    def boost(self, target_playlists, last_tracks=2, k=5, gamma=0.1):
         """
         Boost the eurm for playlists with tracks given in order
         :param: k: the first top k tracks of the artist will be boosted
+        :param last_tracks: number of last tracks to be considered
         :param: gamma: the weight of the boost
         :return: eurm: the boosted eurm
         """
@@ -70,14 +72,14 @@ class AlbumBoost(object):
         rows = []
         cols = []
 
-        df = dr.train_df
+        df = self.datareader.train_df
 
         for p in tqdm(target_playlists[:5000], desc='AlbumBoost'):
 
             known_tracks = df.loc[df['playlist_id'] == p]['track_id'].values[::-1]
 
             lasts = []
-            for j in range(2):
+            for j in range(last_tracks):
                 lasts.append(self.track_to_album[known_tracks[j]])
 
             lasts = list(set(lasts))
@@ -99,25 +101,24 @@ class AlbumBoost(object):
 
 
 if __name__ == '__main__':
-    dr = Datareader()
+    dr = Datareader(train_new=2)
     ev = Evaluator()
     urm = dr.get_urm()
-    t_ids = dr.target_playlists
-    verbose = False
+    eurm = dr.get_eurm_copenaghen()
+    ab = AlbumBoost(dr, eurm=eurm)
+    best = 0
 
-    s = sim.tversky(pre.bm25_row(urm.T), pre.bm25_col(urm), k=5000, alpha=0.30, beta=0.50, verbose=verbose,
-                    format_output='csr')
+    for lt in [1, 2, 3, 4]:
+        for k in [2, 3, 4, 5, 6]:
+            for g in [0.0001, 0.0005, 0.001, 0.005, 0.01]:
+                boosted = ab.boost(dr.target_playlists, last_tracks=lt, gamma=g, k=k)
+                score = ev.evaluation(boosted, urm, dr, save=False, name='ab')
+                if score > best: best = score
 
-    s.data = np.power(s.data, 0.75)
-    r_cfib = sim.dot_product(urm, s.T, target_rows=t_ids, k=500, verbose=verbose)
-    score = ev.evaluation(r_cfib, urm, dr, save=False, name='best_cf_ib')
-    print('%.5f' % (score))
-
-    ab = AlbumBoost(dr, eurm=r_cfib, urm=urm)
-
-    for g in [1]:
-        for k in [10]:
-            boosted = ab.boost(target_playlists=dr.target_playlists, k=k, gamma=g)
-            score = ev.evaluation(boosted, urm, dr, save=True, name='copenhagen_boosted')
-            print(g, k, '%.5f' % (score))
+                print('gamma = ' + str(g))
+                print('last = ' + str(lt))
+                print('k = ' + str(k))
+                print('score = %.5f' % score)
+                print('best = %.5f' % best)
+                print('-----------------------')
 

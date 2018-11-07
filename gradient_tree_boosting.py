@@ -32,12 +32,8 @@ class XGBModel(object):
         count = Counter(X_train['PID'].values)
         group = []
 
-        print(pids)
-
         for p in pids:
             group.append(count[p])
-
-        print(group)
 
         # Remove TID and PID as features
         X_train = X_train.iloc[:, :-3]
@@ -79,7 +75,7 @@ class XGBModel(object):
 
         return preds
 
-    def preds_to_eurm(self, preds):
+    def softmax_preds_to_eurm(self, preds):
         rows = self.X_test['PID'].values
         cols = self.X_test['TID'].values
 
@@ -367,14 +363,13 @@ class XGBFeatureExtractor(object):
         df_list = []
 
         for p in tqdm(self.datareader.target_playlists, desc='Generate prediction samples'):
-            r_start = eurm.indptr[p]
-            r_end = eurm.indptr[p + 1]
+            val = eurm.data[eurm.indptr[p]:eurm.indptr[p+1]]
+            ind = val.argsort()[-10:][::-1]
+            p_tracks = list(eurm[p].indices[ind])
 
-            idx = np.argsort(eurm.data[r_start:r_end])[::-1][:k]
-            p_tracks = eurm.indices[r_start:r_end][idx]
-            p_tracks = list(p_tracks)
-            print(p)
-            print(p_tracks)
+            if p == 7:
+                print(p)
+                print(p_tracks)
 
             # Generate samples
             for i in range(len(p_tracks)):
@@ -408,7 +403,7 @@ class XGBFeatureExtractor(object):
         cols = self.cols.copy()
         cols.remove('TARGET')
         self.df_predict = self.df_predict[cols]
-        self.df_predict.to_csv('pipp.csv', index=False)
+        self.df_predict.to_csv('df_predict_10.csv', index=False)
 
 
 if __name__ == '__main__':
@@ -453,15 +448,18 @@ if __name__ == '__main__':
     ev = Evaluator()
     urm = dr.get_urm()
     eurm = dr.get_eurm_copenaghen()
-    score = ev.evaluation(eurm, urm, dr, save=True, name='cp')
-    idx = np.argsort(eurm.data[eurm.indptr[7]:eurm.indptr[8]])[-10:][::-1]
-    p_tracks = eurm.indices[eurm.indptr[7]:eurm.indptr[8]][idx]
-    print(p_tracks)
+
+    # Remove seeds
+    urm_max = urm.copy()
+    urm_max.data = np.ones(len(urm.data)) * eurm.max()
+    eurm_no_seeds = eurm - urm_max
 
     xgb_fe = XGBFeatureExtractor(dr)
     # xgb_fe.generate_training_samples()
     # xgb_fe.generate_test_samples()
-    xgb_fe.generate_prediction_samples(eurm, 10)
+    xgb_fe.generate_prediction_samples(eurm_no_seeds, 10)
+
+    exit()
 
     train = pd.read_csv('df_train.csv')
     X_train = train.iloc[:, :-1]

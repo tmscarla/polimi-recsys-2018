@@ -37,7 +37,7 @@ class TailBoost(object):
         rows = []
         cols = []
 
-        df = dr.train_df
+        df = self.datareader.train_df
 
         for p in tqdm(target_playlists[:5000], desc='TailBoost'):
 
@@ -91,6 +91,8 @@ if __name__ == '__main__':
                              beta=0.50, verbose=False, format_output='csr')
     t_sim.data = np.power(t_sim.data, 0.75)
 
+    best = 0
+
     for lt in [2, 4, 5, 6, 7, 8, 9]:
         for k in [2, 3, 5, 6, 7, 9]:
             for g in [0.0001, 0.0005, 0.001, 0.005, 0.01]:
@@ -98,9 +100,11 @@ if __name__ == '__main__':
                 tb = TailBoost(dr, eurm_ens, t_sim)
                 boosted = tb.boost(dr.target_playlists, last_tracks=lt, gamma=g, k=k)
                 score = ev.evaluation(boosted, urm, dr, save=False, name='tb')
+                if score > best: best = score
 
                 print('gamma = ' + str(g))
                 print('last = ' + str(lt))
                 print('k = ' + str(k))
                 print('%.5f' % score)
+                print('%.5f' % best)
                 print('-----------------------')
