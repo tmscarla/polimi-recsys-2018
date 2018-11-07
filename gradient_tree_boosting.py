@@ -23,7 +23,7 @@ class XGBModel(object):
     def __init__(self, datareader):
         self.datareader = datareader
 
-    def fit(self, X_train, y_train, dump=True, verbose=False):
+    def fit(self, X_train, y_train, dump=False, verbose=False):
         if verbose:
             print('Start training xgb:')
 
@@ -47,8 +47,9 @@ class XGBModel(object):
             'max_depth': 10,  # the maximum depth of each tree
             'eta': 0.3,  # the training step for each iteration
             'silent': 1,  # logging mode - quiet
-            'objective': 'rank:map'}  # the number of classes that exist in this datset
-        num_round = 100  # the number of training iterations
+            'objective': 'multi:softprob',
+            'num_class': 2}  # the number of classes that exist in this datset
+        num_round = 50  # the number of training iterations
 
         # Train model
         self.bst = xgb.train(param, dtrain, num_round, verbose_eval=True)
@@ -364,12 +365,8 @@ class XGBFeatureExtractor(object):
 
         for p in tqdm(self.datareader.target_playlists, desc='Generate prediction samples'):
             val = eurm.data[eurm.indptr[p]:eurm.indptr[p+1]]
-            ind = val.argsort()[-10:][::-1]
+            ind = val.argsort()[-k:][::-1]
             p_tracks = list(eurm[p].indices[ind])
-
-            if p == 7:
-                print(p)
-                print(p_tracks)
 
             # Generate samples
             for i in range(len(p_tracks)):
@@ -403,16 +400,13 @@ class XGBFeatureExtractor(object):
         cols = self.cols.copy()
         cols.remove('TARGET')
         self.df_predict = self.df_predict[cols]
-        self.df_predict.to_csv('df_predict_10.csv', index=False)
+        self.df_predict.to_csv('df_predict_' + str(k) + '.csv', index=False)
 
 
 if __name__ == '__main__':
     # dr = Datareader()
     # ev = Evaluator()
     # urm = dr.get_urm()
-    # #eurm = dr.get_eurm_copenaghen()
-    # #score = ev.evaluation(eurm, urm, dr, save=True, name='copen')
-    #
     #
     # pred_vector = pd.read_csv('preds_map_10.csv').values.flatten()
     # print(len(pred_vector))
@@ -429,9 +423,6 @@ if __name__ == '__main__':
     #     p = pids[i]
     #     top = np.argsort(pred_vector[i:i+10])[::-1]
     #     tracks = tids[i:i+10][top]
-    #     print(p)
-    #     print(tracks)
-    #     print('--------')
     #
     #     for j in range(10):
     #         r.append(p)
@@ -454,27 +445,23 @@ if __name__ == '__main__':
     urm_max.data = np.ones(len(urm.data)) * eurm.max()
     eurm_no_seeds = eurm - urm_max
 
-    xgb_fe = XGBFeatureExtractor(dr)
+    # xgb_fe = XGBFeatureExtractor(dr)
     # xgb_fe.generate_training_samples()
     # xgb_fe.generate_test_samples()
-    xgb_fe.generate_prediction_samples(eurm_no_seeds, 10)
-
-    exit()
+    # xgb_fe.generate_prediction_samples(eurm_no_seeds, 30)
 
     train = pd.read_csv('df_train.csv')
     X_train = train.iloc[:, :-1]
     y_train = train.iloc[:, -1]
 
-    X_test = pd.read_csv('df_predict_10.csv')
+    X_test = pd.read_csv('df_predict_30.csv')
 
     xgbmodel = XGBModel(dr)
     xgbmodel.fit(X_train=train, y_train=y_train)
     preds = xgbmodel.predict(X_test)
-    preds_df = pd.DataFrame(preds)
-    preds_df.to_csv('preds_map_10.csv', index=False)
-
-    exit()
-    eurm_xgb = xgbmodel.preds_to_eurm(preds)
+    # preds_df = pd.DataFrame(preds)
+    # preds_df.to_csv('preds_soft_10.csv', index=False)
+    eurm_xgb = xgbmodel.softmax_preds_to_eurm(preds)
     print(eurm.shape)
 
     eurm_xgb = pre.norm_l1_row(eurm_xgb)
